@@ -1,0 +1,277 @@
+program ueb7;
+{
+  Programm Beschreibung: Sokoban Spiel Programmierübung
+  Datum: . .2025
+}
+
+{$APPTYPE CONSOLE}
+{$R+,Q+,X-}
+
+uses
+  System.SysUtils,
+  Windows;
+
+// Setzt die Ausgabeposition der Konsole auf die angegebene Koordinate.
+// @param
+// x,y - zu setzende Position in der Konsole ab 0/0 = oben links
+procedure setConsolePosition(x, y: byte);
+var
+  coord: _COORD;
+begin
+  coord.x := x;
+  coord.y := y;
+  if SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord) then;
+end;
+
+// Setzt die Textfarbe der Konsole.
+// @param
+// color - zu setzender Farbwert
+procedure setTextColor(color: word);
+begin
+  if SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color) then;
+end;
+
+const
+  COLS = 10;
+  ROWS = 12;
+  FIELD_10x12
+    : string =
+    'KKKKKKKKKKKKKWWWWWKKKWWWEEEWKKKWTSBEEWKKKWWWEBTWKKKWTWWBEWKKKWEWETEWWKKWBEXBBTWKKWEEETEEWKKWWWWWWWWKKKKKKKKKKKKKKKKKKKKK';
+
+type
+  TWidth = 1 .. COLS;
+  THeight = 1 .. ROWS;
+
+  TState = (stHintergrund, stKiste, stKiste_auf_Zielfeld, stLeer, stSokoban,
+    stSokoban_auf_Zielfeld, stZielfeld, stMauer);
+  TDir = (diNorden, diOsten, diSüden, diWesten);
+
+  TField = array [TWidth, THeight] of TState;
+
+  // Prüft ob ein Feld gültig ist: zuerst spalte, dann Zeile.
+function isValidCoord(col, row: integer): boolean;
+
+begin
+  isValidCoord := (col >= low(TWidth)) and (col <= high(TWidth)) and
+    (row >= low(THeight)) and (row <= high(THeight));
+end;
+
+function initField: TField;
+var
+  col: TWidth;
+  row: THeight;
+  field: TField;
+  spos: byte;
+
+begin
+  for col := low(TWidth) to high(TWidth) do
+
+    for row := low(THeight) to high(THeight) do
+    begin
+      spos := col + (row - 1) * COLS;
+      case FIELD_10x12[spos] of
+
+        'K':
+          field[col, row] := stHintergrund;
+        'B':
+          field[col, row] := stKiste;
+        'X':
+          field[col, row] := stKiste_auf_Zielfeld;
+        'E':
+          field[col, row] := stLeer;
+        'S':
+          field[col, row] := stSokoban;
+        'O':
+          field[col, row] := stSokoban_auf_Zielfeld;
+        'T':
+          field[col, row] := stZielfeld;
+        'W':
+          field[col, row] := stMauer;
+      end;
+    end;
+
+  initField := field;
+
+end;
+
+procedure printField(field: TField);
+var
+  col: TWidth;
+  row: THeight;
+begin
+  setConsolePosition(0, 0);
+  for row := low(THeight) to high(THeight) do
+  begin
+    for col := low(TWidth) to high(TWidth) do
+    begin
+      case field[col, row] of
+        stHintergrund:
+          begin
+            setTextColor(0);
+            write('▓▓');
+          end;
+        stKiste:
+          begin
+            setTextColor(14);
+            write('▓▓');
+          end;
+        stKiste_auf_Zielfeld:
+          begin
+            setTextColor(10);
+            write('▓▓');
+          end;
+        stLeer:
+          begin
+            setTextColor(3);
+            write('▓▓');
+          end;
+        stSokoban:
+          begin
+            setTextColor(12);
+            write('▓▓');
+          end;
+        stSokoban_auf_Zielfeld:
+          begin
+            setTextColor(12);
+            write('▓▓');
+          end;
+        stZielfeld:
+          begin
+            setTextColor(10);
+            write('o ');
+          end;
+        stMauer:
+          begin
+            setTextColor(7);
+            write('▓▓');
+          end;
+      end;
+    end;
+    writeln;
+  end;
+end;
+
+
+procedure moveSokoban(var field: TField; dir: TDir; var steps, moves: byte);
+
+const
+  OFFSET_COL: array [TDir] of integer = (0, 1, 0, -1);
+  OFFSET_ROW: array [TDir] of integer = (-1, 0, 1, 0);
+
+var
+  sokobanGefunden: boolean;
+  col, sokCol, newCol, newChestCol: TWidth;
+  row, sokRow, newRow, newChestRow: THeight;
+  currentField, newField, newChestField: TState;
+
+begin
+  sokobanGefunden := false;
+  sokCol := 1;
+  sokRow := 1;
+
+  // Sokoban-Position suchen
+  for row := low(THeight) to high(THeight) do
+    for col := low(TWidth) to high(TWidth) do
+      if (not sokobanGefunden) and (field[col, row] = stSokoban) or
+        (field[col, row] = stSokoban_auf_Zielfeld) then
+      begin
+        sokCol := col;
+        sokRow := row;
+        sokobanGefunden := true;
+      end;
+
+  if sokobanGefunden then
+  begin
+    newCol := sokCol + OFFSET_COL[dir];
+    newRow := sokRow + OFFSET_ROW[dir];
+
+    if isValidCoord(newCol, newRow) then
+    begin
+      currentField := field[sokCol, sokRow];
+      newField := field[newCol, newRow];
+
+      // Bewegung ohne Kiste
+      if (newField = stLeer) or (newField = stZielfeld) then
+      begin
+        if currentField = stSokoban then
+          field[sokCol, sokRow] := stLeer
+        else
+          field[sokCol, sokRow] := stZielfeld;
+
+        if newField = stLeer then
+          field[newCol, newRow] := stSokoban
+        else
+          field[newCol, newRow] := stSokoban_auf_Zielfeld;
+
+        steps := steps + 1;
+      end
+
+      // Position Kiste
+      else if (newField = stKiste) or (newField = stKiste_auf_Zielfeld) then
+      begin
+        newChestCol := newCol + OFFSET_COL[dir];
+        newChestRow := newRow + OFFSET_ROW[dir];
+
+        if isValidCoord(newChestCol, newChestRow) then
+        begin
+          newChestField := field[newChestCol, newChestRow];
+
+          // Kiste verschieben
+          if (newChestField = stLeer) or (newChestField = stZielfeld) then
+          begin
+            if newField = stKiste then
+              field[newCol, newRow] := stSokoban
+            else
+              field[newCol, newRow] := stSokoban_auf_Zielfeld;
+
+            if newChestField = stLeer then
+              field[newChestCol, newChestRow] := stKiste
+            else
+              field[newChestCol, newChestRow] := stKiste_auf_Zielfeld;
+
+            // Sokoban ursprungs pos zurücksetzen
+            if currentField = stSokoban then
+              field[sokCol, sokRow] := stLeer
+            else
+              field[sokCol, sokRow] := stZielfeld;
+
+            steps := steps + 1;
+            moves := moves + 1;
+          end;
+        end;
+      end;
+    end;
+  end;
+end;
+
+{
+function isSolvable(field: TField): boolean;
+function isSolved(field : TField) : boolean;
+}
+
+var
+  input: char;
+  steps, moves: byte;
+  field: TField;
+begin
+  field := initField;
+  steps := 0;
+  moves := 0;
+
+  repeat
+    printField(field);
+    writeln;
+    setTextColor(7);
+    writeln('WASD zum Bewegen, Q zum Beenden');
+    setTextColor(7);
+    readln(input);
+
+    case UpCase(input) of
+      'W': moveSokoban(field, diNorden, steps, moves);
+      'A': moveSokoban(field, diWesten, steps, moves);
+      'S': moveSokoban(field, diSüden, steps, moves);
+      'D': moveSokoban(field, diOsten, steps, moves);
+    end;
+
+  until UpCase(input) = 'Q';
+end.
