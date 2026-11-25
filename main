@@ -1,6 +1,6 @@
 program ueb7;
 {
-  Programm Beschreibung: Sokoban Spiel Programmierübung
+  Programm Beschreibung: Sokoban Minigame Programmierübung
   Datum: . .2025
 }
 
@@ -95,11 +95,12 @@ begin
 end;
 
 procedure printField(field: TField);
+
 var
   col: TWidth;
   row: THeight;
 begin
-  setConsolePosition(0, 0);
+  setConsolePosition(0, 2);
   for row := low(THeight) to high(THeight) do
   begin
     for col := low(TWidth) to high(TWidth) do
@@ -146,11 +147,11 @@ begin
             write('▓▓');
           end;
       end;
+
     end;
     writeln;
   end;
 end;
-
 
 procedure moveSokoban(var field: TField; dir: TDir; var steps, moves: byte);
 
@@ -219,21 +220,23 @@ begin
           // Kiste verschieben
           if (newChestField = stLeer) or (newChestField = stZielfeld) then
           begin
+            // Update Sokoban's previous position
+            if currentField = stSokoban then
+              field[sokCol, sokRow] := stLeer
+            else
+              field[sokCol, sokRow] := stZielfeld;
+
+            // Move Sokoban to the chest's previous position
             if newField = stKiste then
               field[newCol, newRow] := stSokoban
             else
               field[newCol, newRow] := stSokoban_auf_Zielfeld;
 
+            // Move chest to its new position
             if newChestField = stLeer then
               field[newChestCol, newChestRow] := stKiste
             else
               field[newChestCol, newChestRow] := stKiste_auf_Zielfeld;
-
-            // Sokoban ursprungs pos zurücksetzen
-            if currentField = stSokoban then
-              field[sokCol, sokRow] := stLeer
-            else
-              field[sokCol, sokRow] := stZielfeld;
 
             steps := steps + 1;
             moves := moves + 1;
@@ -244,34 +247,195 @@ begin
   end;
 end;
 
-{
 function isSolvable(field: TField): boolean;
-function isSolved(field : TField) : boolean;
-}
+var
+  col: TWidth;
+  row: THeight;
+  stuck: boolean;
+  cornered: boolean;
+
+begin
+  isSolvable := true; // Assume solvable unless proven otherwise
+
+  for col := low(TWidth) to high(TWidth) do
+  begin
+    for row := low(THeight) to high(THeight) do
+    begin
+      if (field[col, row] = stKiste) then
+      // Only check for boxes not on target fields
+      begin
+        // Check for dead corners (kiste an zwei benachbarten Seiten Mauersteine)
+        stuck := false;
+        // Top-left corner
+        if isValidCoord(col - 1, row) and isValidCoord(col, row - 1) then
+          if (field[col - 1, row] = stMauer) and (field[col, row - 1] = stMauer)
+          then
+            stuck := true;
+        // Top-right corner
+        if isValidCoord(col + 1, row) and isValidCoord(col, row - 1) then
+          if (field[col + 1, row] = stMauer) and (field[col, row - 1] = stMauer)
+          then
+            stuck := true;
+        // Bottom-left corner
+        if isValidCoord(col - 1, row) and isValidCoord(col, row + 1) then
+          if (field[col - 1, row] = stMauer) and (field[col, row + 1] = stMauer)
+          then
+            stuck := true;
+        // Bottom-right corner
+        if isValidCoord(col + 1, row) and isValidCoord(col, row + 1) then
+          if (field[col + 1, row] = stMauer) and (field[col, row + 1] = stMauer)
+          then
+            stuck := true;
+
+        if stuck then
+        begin
+          isSolvable := false;
+        end;
+      end;
+    end;
+  end;
+
+  // Check for 2x2 deadlock (2x2-Bereich nur aus Kisten und Mauern, bei dem mindestens eine Kiste nicht auf einem Zielfeld steht)
+  for col := low(TWidth) to high(TWidth) - 1 do
+  begin
+    for row := low(THeight) to high(THeight) - 1 do
+    begin
+      cornered := false;
+      if ((field[col, row] = stKiste) or (field[col, row] = stMauer)) and
+        ((field[col + 1, row] = stKiste) or (field[col + 1, row] = stMauer)) and
+        ((field[col, row + 1] = stKiste) or (field[col, row + 1] = stMauer)) and
+        ((field[col + 1, row + 1] = stKiste) or
+        (field[col + 1, row + 1] = stMauer)) then
+      begin
+        // Check if at least one box in the 2x2 area is not on a target field
+        if ((field[col, row] = stKiste) and
+          (field[col, row] <> stKiste_auf_Zielfeld)) or
+          ((field[col + 1, row] = stKiste) and
+          (field[col + 1, row] <> stKiste_auf_Zielfeld)) or
+          ((field[col, row + 1] = stKiste) and
+          (field[col, row + 1] <> stKiste_auf_Zielfeld)) or
+          ((field[col + 1, row + 1] = stKiste) and
+          (field[col + 1, row + 1] <> stKiste_auf_Zielfeld)) then
+        begin
+          cornered := true;
+        end;
+      end;
+
+      if cornered then
+      begin
+        isSolvable := false;
+      end;
+    end;
+  end;
+end;
+
+function isSolved(field: TField): boolean;
+var
+  col: TWidth;
+  row: THeight;
+begin
+  isSolved := true; // Assume solved unless proven otherwise
+
+  for col := low(TWidth) to high(TWidth) do
+  begin
+    for row := low(THeight) to high(THeight) do
+    begin
+      // If there's a Kiste (not on a target) or a Zielfeld (without a box), it's not solved.
+      if (field[col, row] = stKiste) or (field[col, row] = stZielfeld) then
+      begin
+        isSolved := false;
+      end;
+    end;
+  end;
+end;
 
 var
   input: char;
   steps, moves: byte;
   field: TField;
+
 begin
   field := initField;
-  steps := 0;
-  moves := 0;
 
-  repeat
-    printField(field);
-    writeln;
-    setTextColor(7);
-    writeln('WASD zum Bewegen, Q zum Beenden');
-    setTextColor(7);
-    readln(input);
+  // Clear the console initially
+  for steps := 0 to ROWS + 5 do // Clear enough lines for the field and status
+  begin
+    setConsolePosition(0, steps);
+    writeln('                                                                                ');
+    // Clear a line
+  end;
 
-    case UpCase(input) of
-      'W': moveSokoban(field, diNorden, steps, moves);
-      'A': moveSokoban(field, diWesten, steps, moves);
-      'S': moveSokoban(field, diSüden, steps, moves);
-      'D': moveSokoban(field, diOsten, steps, moves);
+  if isSolvable(field) then
+  begin
+    steps := 0;
+    moves := 0;
+    repeat
+
+      // Display steps and moves at the top of the console
+      setConsolePosition(0, 0);
+      setTextColor(7);
+      writeln('Schritte: ', steps, ', Kisten geschoben: ', moves);
+
+      printField(field);
+
+      setConsolePosition(0, ROWS + 2);
+      // Position below the field for instructions
+      setTextColor(7);
+      writeln('W A S D = bewegen, Q = beenden, R = Neustart');
+      readln(input);
+      input := UpCase(input);
+
+      case input of
+        'W':
+          moveSokoban(field, diNorden, steps, moves);
+        'D':
+          moveSokoban(field, diOsten, steps, moves);
+        'S':
+          moveSokoban(field, diSüden, steps, moves);
+        'A':
+          moveSokoban(field, diWesten, steps, moves);
+        'R': // Restart the level
+          begin
+            field := initField;
+            steps := 0;
+            moves := 0;
+          end;
+      end;
+
+      // Check game status after each move
+      if isSolved(field) then
+      begin
+        printField(field); // Print final state
+        setConsolePosition(0, ROWS + 4);
+        setTextColor(7);
+        writeln('Glückwunsch! Level gelöst in ', steps, ' Schritten und ',
+          moves, ' Kistenbewegungen!');
+        readln; // Wait for user to acknowledge
+      end
+      else if not isSolvable(field) then
+      begin
+        printField(field); // Print final state
+        setConsolePosition(0, ROWS + 4);
+        setTextColor(7);
+        writeln('Das Level ist nicht mehr lösbar!');
+        readln; // Wait for user to acknowledge
+      end;
+
+    until input = 'Q';
+
+    if input = 'Q' then
+    begin
+      setTextColor(7);
+      writeln('Spiel beendet.');
+      readln;
     end;
+  end
+  else
+  begin
+    setConsolePosition(0, 0);
+    setTextColor(7);
+    writeln('Das Level ist unlösbar.');
+    readln;
+  end;
 
-  until UpCase(input) = 'Q';
 end.
